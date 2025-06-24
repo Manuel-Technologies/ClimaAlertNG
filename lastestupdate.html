@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClimaAlert NG - Smart Weather App</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Poppins', sans-serif;
+    }
+    body {
+      background: linear-gradient(to right, #1e3c72, #2a5298);
+      color: #fff;
+      padding: 20px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .container {
+      background: rgba(255, 255, 255, 0.07);
+      backdrop-filter: blur(12px);
+      border-radius: 20px;
+      padding: 30px;
+      max-width: 500px;
+      width: 100%;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    h1 {
+      text-align: center;
+      font-size: 2rem;
+      margin-bottom: 20px;
+    }
+    input, button {
+      width: 100%;
+      padding: 14px;
+      margin-top: 10px;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+    }
+    input {
+      background: #fff;
+      color: #000;
+    }
+    button {
+      background: #f39c12;
+      color: #fff;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #d68910;
+    }
+    .weather-result, .advice, .nepa-box {
+      margin-top: 20px;
+      background: rgba(0,0,0,0.3);
+      padding: 15px;
+      border-radius: 12px;
+      text-align: center;
+    }
+    .forecast-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 20px;
+    }
+    .forecast-card {
+      background: rgba(255,255,255,0.15);
+      border-radius: 10px;
+      padding: 10px;
+      width: 100px;
+      text-align: center;
+    }
+    #map {
+      height: 250px;
+      width: 100%;
+      margin-top: 25px;
+      border-radius: 12px;
+    }
+    footer {
+      margin-top: 20px;
+      text-align: center;
+      color: #cbd5e1;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>ClimaAlert NG</h1>
+    <input type="text" id="cityInput" placeholder="Enter city (e.g., Lagos)" />
+    <button onclick="manualWeather()">Check Weather</button>
+    <div id="weatherDisplay" class="weather-result"></div>
+    <div id="forecastDisplay" class="forecast-container"></div>
+    <div id="adviceBox" class="advice"></div>
+    <div id="nepaBox" class="nepa-box"></div>
+    <div id="map"></div>
+    <p class="slogan" style="text-align:center; margin-top: 15px;">"Your Local Sky. Your Daily Guide."</p>
+  </div>
+  <footer>&copy; 2025 Manuel Technologies. All rights reserved.</footer>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    const apiKey = '01cdba5f4b89efc2a0b20a7311fdc929';
+
+    async function getWeather(city) {
+      const weatherBox = document.getElementById("weatherDisplay");
+      const forecastBox = document.getElementById("forecastDisplay");
+      const adviceBox = document.getElementById("adviceBox");
+      const nepaBox = document.getElementById("nepaBox");
+      weatherBox.innerHTML = "Loading...";
+      forecastBox.innerHTML = '';
+      adviceBox.innerHTML = '';
+      nepaBox.innerHTML = '';
+
+      try {
+        const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric`);
+        const data = await res.json();
+        const { name } = data;
+        const { temp, humidity } = data.main;
+        const { description } = data.weather[0];
+        const { speed } = data.wind;
+
+        weatherBox.innerHTML = `
+          <h2>${name}</h2>
+          <p><strong>🌡 Temp:</strong> ${temp}°C</p>
+          <p><strong>🌤 Condition:</strong> ${description}</p>
+          <p><strong>💧 Humidity:</strong> ${humidity}%</p>
+          <p><strong>💨 Wind:</strong> ${speed} m/s</p>
+        `;
+
+        giveAdvice(temp, description, humidity);
+        predictNepa(temp, description);
+
+        const forecastRes = await fetch(`https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${apiKey}&units=metric`);
+        const forecastData = await forecastRes.json();
+        const forecastList = forecastData.list.filter((_, i) => i % 8 === 0).slice(0, 5);
+
+        forecastList.forEach(day => {
+          const date = new Date(day.dt_txt);
+          const dayShort = date.toLocaleDateString("en-NG", { weekday: "short" });
+          const temp = day.main.temp.toFixed(1);
+          const cond = day.weather[0].description;
+
+          forecastBox.innerHTML += `
+            <div class="forecast-card">
+              <h4>${dayShort}</h4>
+              <p>${temp}°C</p>
+              <p>${cond}</p>
+            </div>
+          `;
+        });
+      } catch (e) {
+        weatherBox.innerHTML = `<p>Error: ${e.message}</p>`;
+      }
+    }
+
+    function giveAdvice(temp, description, humidity) {
+      const box = document.getElementById("adviceBox");
+      let advice = "";
+
+      if (temp >= 30) advice += "🥵 It's hot! Wear light clothes.<br>";
+      if (temp <= 18) advice += "🧥 It's cold! Take a jacket.<br>";
+      if (description.includes("rain")) advice += "☔ Rain expected. Carry an umbrella.<br>";
+      if (humidity > 85) advice += "💧 High humidity. Stay hydrated.<br>";
+      if (description.includes("clear")) advice += "🌞 Perfect weather to go out!<br>";
+
+      box.innerHTML = advice || "No special advice needed. Enjoy your day!";
+    }
+
+    function predictNepa(temp, condition) {
+      const nepa = document.getElementById("nepaBox");
+      let message = "";
+      if (condition.includes("rain")) {
+        message = "🌧 Rain may affect light. Better charge your phone!";
+      } else if (temp > 32) {
+        message = "⚡ High power demand today. NEPA might do their thing 😅";
+      } else {
+        message = "😊 Stable weather. NEPA might be kind today.";
+      }
+      nepa.innerHTML = `<strong>NEPA Prediction:</strong><br>${message}`;
+    }
+
+    function manualWeather() {
+      const city = document.getElementById('cityInput').value.trim();
+      if (city) getWeather(city);
+    }
+
+    function detectWeatherByLocation() {
+      if (!navigator.geolocation) {
+        document.getElementById("weatherDisplay").innerHTML = "Geolocation not supported.";
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(async position => {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        showMap(lat, lon);
+        const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`);
+        const data = await res.json();
+        const city = data.name;
+        getWeather(city);
+      }, () => {
+        document.getElementById("weatherDisplay").innerHTML = "Location permission denied.";
+      });
+    }
+
+    function showMap(lat, lon) {
+      const map = L.map('map').setView([lat, lon], 10);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap '
+      }).addTo(map);
+      L.marker([lat, lon]).addTo(map)
+        .bindPopup("📍 You are here")
+        .openPopup();
+    }
+
+    window.onload = detectWeatherByLocation;
+  </script>
+</body>
+</html>
